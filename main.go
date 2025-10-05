@@ -76,9 +76,11 @@ func cronJob() {
 
 // =================== MAIN ======================
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("⚠️ Warning: .env file not found, using system environment variables")
 	}
+
 	apiKey = os.Getenv("BINANCE_API_KEY")
 	secretKey = os.Getenv("BINANCE_SECRET_KEY")
 	tgToken = os.Getenv("TELEGRAM_TOKEN")
@@ -114,7 +116,11 @@ func main() {
 	// --- default: cron schedule ---
 	c := cron.New()
 	// run every 5 minutes
-	c.AddFunc("@every 5m", cronJob)
+	_, err = c.AddFunc("@every 5m", cronJob)
+	if err != nil {
+		fmt.Println("❌ Cannot schedule job:", err)
+		os.Exit(1)
+	}
 	c.Start()
 
 	log.Println("Bot started. Checking every 5 minutes...")
