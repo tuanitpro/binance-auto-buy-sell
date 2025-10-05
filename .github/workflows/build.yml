@@ -30,4 +30,4 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
-          tags: tuanitpro/binance_auto_buy_sells:latest
+          tags: tuanitpro/binance_auto_buy_sell:latest
