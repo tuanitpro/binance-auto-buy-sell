@@ -55,7 +55,7 @@ func cronJob() {
 		log.Printf("[%s] Buy: %.8f | Current: %.8f | Qty: %.8f | Change: %.2f%% PnL: %.8f\n",
 			s.Symbol, s.BuyPrice, price, s.Free, change, pnlUSDT)
 		if change >= percentThreshold {
-			msg := fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: (+%.2f%%) (%.8f → %.8f)\nSignal: *SELL 🎯* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nProfit: %.8f (USDT)",
+			msg := fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: +%.2f%% (%.8f → %.8f)\nSignal: *SELL 🎯* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nProfit: %.8f (USDT)",
 				s.Symbol, change, s.BuyPrice, price, s.Free, s.BuyPrice, price, pnlUSDT)
 
 			if change >= 2*percentThreshold && s.Free >= 10 {
