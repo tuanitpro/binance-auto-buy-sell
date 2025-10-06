@@ -43,11 +43,10 @@ func (b *HttpRequest) GetPrice(symbol string) (float64, error) {
 
 // PlaceOrder places a market buy/sell order
 func (b *HttpRequest) PlaceOrder(symbol, side string, quantity float64) error {
-	return nil
 	params := map[string]string{
 		"symbol":   symbol,
-		"side":     side, // BUY or SELL
-		"type":     "MARKET",
+		"side":     side,     // BUY or SELL
+		"type":     "MARKET", //LIMIT or MARKET
 		"quantity": fmt.Sprintf("%.6f", quantity),
 	}
 

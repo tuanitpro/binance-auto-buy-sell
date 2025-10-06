@@ -55,22 +55,33 @@ func cronJob() {
 		log.Printf("[%s] Buy: %.8f | Current: %.8f | Qty: %.8f | Change: %.2f%% PnL: %.8f\n",
 			s.Symbol, s.BuyPrice, price, s.Free, change, pnlUSDT)
 		if change >= percentThreshold {
-			msg := fmt.Sprintf("🚀🚀🚀 *Auto-Trade Summary*\nSymbol: #%s \nPnL: +%.2f%% (%.8f → %.8f)\nSignal: *SELL 🎯* \nQuantity %.8f \nCurrent Price: %.8f \nBuy Price: %.8f \nTake-Profit: %.8f (USDT)",
-				s.Symbol, change, s.BuyPrice, price, s.Free, price, s.BuyPrice, pnlUSDT)
+			msg := fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: (+%.2f%%) (%.8f → %.8f)\nSignal: *SELL 🎯* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nProfit: %.8f (USDT)",
+				s.Symbol, change, s.BuyPrice, price, s.Free, s.BuyPrice, price, pnlUSDT)
+
+			if change >= 2*percentThreshold && s.Free >= 10 {
+				if err := api.PlaceOrder(s.Symbol, "SELL", 10); err != nil {
+					log.Printf("Sell order error #%s: %v\n", s.Symbol, err)
+					continue
+				}
+				msg += "\n\nPartial Take-Profit: Sold 10 units."
+			}
+
 			if err := telegram.Send(msg); err != nil {
 				log.Printf("Telegram send error: %v\n", err)
-			}
-			if err := api.PlaceOrder(s.Symbol, "SELL", s.Free); err != nil {
-				log.Printf("Sell order error %s: %v\n", s.Symbol, err)
 			}
 		} else if change <= -percentThreshold {
-			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade Summary*\nSymbol: #%s \nPnL: +%.2f%% (%.8f → %.8f)\nSignal: *BUY ✅* \nQuantity %.8f \nCurrent Price: %.8f \nBuy Price: %.8f \nLoss: %.8f (USDT)",
-				s.Symbol, change, s.BuyPrice, price, s.Free, price, s.BuyPrice, pnlUSDT)
+			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade for : #%s * \nPnL: -%.2f%% (%.8f → %.8f)\nSignal: *BUY ✅* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nLoss: %.8f (USDT)",
+				s.Symbol, change, s.BuyPrice, price, s.Free, s.BuyPrice, price, pnlUSDT)
 			if err := telegram.Send(msg); err != nil {
 				log.Printf("Telegram send error: %v\n", err)
 			}
-			if err := api.PlaceOrder(s.Symbol, "BUY", s.Free); err != nil {
+			if err := api.PlaceOrder(s.Symbol, "BUY", 10); err != nil {
 				log.Printf("Buy order error %s: %v\n", s.Symbol, err)
+				continue
+			}
+			msg += "\n\nDCA Buy Order: Bought 10 units."
+			if err := telegram.Send(msg); err != nil {
+				log.Printf("Telegram send error: %v\n", err)
 			}
 		}
 	}
