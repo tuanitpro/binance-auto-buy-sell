@@ -55,8 +55,8 @@ func cronJob() {
 		log.Printf("[%s] Buy: %.8f | Current: %.8f | Qty: %.8f | Change: %.2f%% PnL: %.8f\n",
 			s.Symbol, s.BuyPrice, price, s.Free, change, pnlUSDT)
 		if change >= percentThreshold {
-			msg := fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: +%.2f%% (%.8f → %.8f)\nSignal: *SELL 🎯* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nProfit: %.8f (USDT)",
-				s.Symbol, change, s.BuyPrice, price, s.Free, s.BuyPrice, price, pnlUSDT)
+			msg := fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: +%.2f%% (%.8f → %.8f)\nProfit: %.8f (USDT)\nSignal: *SELL 🎯* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f",
+				s.Symbol, change, s.BuyPrice, price, pnlUSDT, s.Free, s.BuyPrice, price)
 
 			if change >= 2*percentThreshold && s.Free >= 10 {
 				if err := api.PlaceOrder(s.Symbol, "SELL", 10); err != nil {
@@ -70,8 +70,8 @@ func cronJob() {
 				log.Printf("Telegram send error: %v\n", err)
 			}
 		} else if change <= -percentThreshold {
-			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade for : #%s * \nPnL: -%.2f%% (%.8f → %.8f)\nSignal: *BUY ✅* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nLoss: %.8f (USDT)",
-				s.Symbol, change, s.BuyPrice, price, s.Free, s.BuyPrice, price, pnlUSDT)
+			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade for : #%s * \nPnL: -%.2f%% (%.8f → %.8f)\nLoss: %.8f (USDT)\nSignal: *BUY ✅* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f",
+				s.Symbol, change, s.BuyPrice, price, pnlUSDT, s.Free, s.BuyPrice, price)
 			if err := telegram.Send(msg); err != nil {
 				log.Printf("Telegram send error: %v\n", err)
 			}
