@@ -84,7 +84,7 @@ func cronJob() {
 		investedUSDT := s.BuyPrice * s.Free
 		currentValueUSDT := price * s.Free
 		pnlUSDT := currentValueUSDT - investedUSDT
-		log.Printf("[%s] Qty: %.8f | Buy Price: %.8f | Current: %.8f | Change: %.2f%% | PnL: %.8f | StochRSI: %.2f | MACD: %.3f  | Next Price: %.2f (%+.2f%%) | Signal: %s\n",
+		log.Printf("[%s] Qty: %.8f | Buy Price: %.8f | Current: %.8f | Change: %.2f%% | PnL: %.8f | StochRSI: %.2f | MACD: %.3f  | Next Price: %.8f (%+.2f%%) | Signal: %s\n",
 			s.Symbol, s.Free, s.BuyPrice, price, change, pnlUSDT, prediction.StochRSI, prediction.MACD, prediction.NextPrice, prediction.ChangePct, prediction.Signal)
 
 		if change >= percentThreshold {
