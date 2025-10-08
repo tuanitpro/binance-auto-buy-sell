@@ -70,7 +70,7 @@ func cronJob() {
 				log.Printf("Telegram send error: %v\n", err)
 			}
 		} else if change <= -(percentThreshold / 2) {
-			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade for : #%s * \nPnL: -%.2f%% (%.8f → %.8f)\nLoss: -%.8f (USDT)\nSignal: *BUY ✅* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f",
+			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade for : #%s * \nPnL: %.2f%% (%.8f → %.8f)\nLoss: %.8f (USDT)\nSignal: *BUY ✅* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f",
 				s.Symbol, change, s.BuyPrice, price, pnlUSDT, s.Free, s.BuyPrice, price)
 
 			if change <= -percentThreshold {
