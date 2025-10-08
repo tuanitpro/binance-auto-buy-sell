@@ -73,6 +73,17 @@ func cronJob() {
 			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade for : #%s * \nPnL: %.2f%% (%.8f → %.8f)\nLoss: %.8f (USDT)\nSignal: *BUY ✅* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f",
 				s.Symbol, change, s.BuyPrice, price, pnlUSDT, s.Free, s.BuyPrice, price)
 
+			results, _ := api.CalculateDCA(s.Symbol, price, s.Free, s.BuyPrice)
+			fmt.Printf("\n\n📊 DCA Strategy for %s\n", s.Symbol)
+
+			msg += fmt.Sprintf("\n\n📊 DCA Strategy for #%s\n", s.Symbol)
+			for _, r := range results {
+				fmt.Printf("🎯 Target Avg: %.2f USDT |  Drop: %.2f%% | Buy: %.1f | Total: %.1f | Cost: %.2f USDT\n",
+					r.TargetAvg, r.DropPct, r.BuyQty, r.NewTotal, r.USDTSpent)
+
+				msg += fmt.Sprintf("🎯 Target Avg: %.2f USDT | Buy: %.1f | Total: %.1f | Cost: %.2f USDT\n", r.TargetAvg, r.BuyQty, r.NewTotal, r.USDTSpent)
+			}
+
 			if change <= -percentThreshold {
 				if err := api.PlaceOrder(s.Symbol, "BUY", 10); err != nil {
 					log.Printf("Buy order error %s: %v\n", s.Symbol, err)
