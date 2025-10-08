@@ -3,6 +3,7 @@ package binance
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"time"
@@ -17,13 +18,67 @@ type Trade struct {
 	Time    time.Time
 }
 
-// DCAResult holds each DCA target summary
-type DCAResult struct {
-	TargetAvg float64
-	BuyQty    float64
-	NewTotal  float64
-	USDTSpent float64
-	DropPct   float64
+// Kline represents a simplified kline/candle
+type Kline struct {
+	OpenTime  time.Time
+	Open      float64
+	High      float64
+	Low       float64
+	Close     float64
+	Volume    float64
+	CloseTime time.Time
+}
+
+// GetKlines fetches klines (candles) for symbol/interval. interval like "4h". limit optional <=1000
+func (b *HttpRequest) GetKlines(symbol, interval string, limit int) ([]Kline, error) {
+	params := url.Values{}
+	params.Add("symbol", symbol)
+	params.Add("interval", interval)
+	if limit > 0 {
+		params.Add("limit", strconv.Itoa(limit))
+	}
+
+	// use PublicRequest to call endpoint but PublicRequest composes endpoint+params, so:
+	body, err := b.PublicRequest("/api/v3/klines", map[string]string{"symbol": symbol, "interval": interval, "limit": strconv.Itoa(limit)})
+	if err != nil {
+		return nil, fmt.Errorf("GetKlines error: %w", err)
+	}
+
+	// kline response: array of arrays
+	var raw [][]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse klines: %w", err)
+	}
+
+	out := make([]Kline, 0, len(raw))
+	for _, r := range raw {
+		// index mapping: 0 openTime, 1 open, 2 high, 3 low, 4 close, 5 volume, 6 closeTime...
+		openTimeMs := int64(r[0].(float64))
+		openStr := r[1].(string)
+		highStr := r[2].(string)
+		lowStr := r[3].(string)
+		closeStr := r[4].(string)
+		volStr := r[5].(string)
+		closeTimeMs := int64(r[6].(float64))
+
+		open, _ := strconv.ParseFloat(openStr, 64)
+		high, _ := strconv.ParseFloat(highStr, 64)
+		low, _ := strconv.ParseFloat(lowStr, 64)
+		closeP, _ := strconv.ParseFloat(closeStr, 64)
+		vol, _ := strconv.ParseFloat(volStr, 64)
+
+		out = append(out, Kline{
+			OpenTime:  time.UnixMilli(openTimeMs),
+			Open:      open,
+			High:      high,
+			Low:       low,
+			Close:     closeP,
+			Volume:    vol,
+			CloseTime: time.UnixMilli(closeTimeMs),
+		})
+	}
+
+	return out, nil
 }
 
 // GetPrice retrieves the current price for a symbol (e.g., BTCUSDT)
@@ -116,55 +171,4 @@ func (b *HttpRequest) GetTradeHistory(symbol string, limit int) ([]Trade, error)
 	})
 	return trades, nil
 
-}
-
-// CalculateDCA computes how much to buy to reduce loss by different targets:
-//   - 30% reduction
-//   - 50% reduction
-//   - 80% reduction
-//   - 0% (break even)
-func (b *HttpRequest) CalculateDCA(symbol string, currentPrice float64, currentQty, buyPrice float64) ([]DCAResult, error) {
-	if currentPrice <= 0 {
-		return nil, fmt.Errorf("invalid current price for %s", symbol)
-	}
-	if currentQty <= 0 || buyPrice <= 0 {
-		return nil, fmt.Errorf("invalid input: qty=%.2f buyPrice=%.2f", currentQty, buyPrice)
-	}
-
-	results := []DCAResult{}
-
-	// current loss percentage
-	lossPct := (1 - currentPrice/buyPrice) * 100
-	if lossPct <= 0 {
-		return results, nil // no loss, no DCA needed
-	}
-
-	// different DCA goals
-	targetLossReductions := []float64{30, 50, 80, 0} // 30%, 50%, 80%, 0% (break-even)
-
-	for _, reduction := range targetLossReductions {
-		targetLoss := lossPct * (1 - reduction/100) // e.g. 8.4% * (1-0.5)=4.2%
-		targetAvg := currentPrice / (1 - targetLoss/100)
-
-		// DCA formula: q2 = ((p_target - p1)*q1) / (p2 - p_target)
-		q2 := ((targetAvg - buyPrice) * currentQty) / (currentPrice - targetAvg)
-		if q2 <= 0 {
-			continue
-		}
-
-		totalQty := currentQty + q2
-		newAvg := (buyPrice*currentQty + currentPrice*q2) / totalQty
-		usdtSpent := q2 * currentPrice
-		newLossPct := (1 - currentPrice/newAvg) * 100
-
-		results = append(results, DCAResult{
-			TargetAvg: newAvg,
-			BuyQty:    q2,
-			NewTotal:  totalQty,
-			USDTSpent: usdtSpent,
-			DropPct:   newLossPct,
-		})
-	}
-
-	return results, nil
 }
