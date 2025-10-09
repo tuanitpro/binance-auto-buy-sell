@@ -9,12 +9,13 @@ import (
 
 // AccountBalance represents an asset in the user's Binance account
 type AccountBalance struct {
-	Symbol   string  // e.g., BTCUSDT, ETHUSDT
-	Asset    string  // e.g., BTC, ETH
-	Free     float64 // available amount
-	Locked   float64 // in open orders
-	Total    float64 // Free + Locked
-	BuyPrice float64 // average buy price computed from trade history
+	Symbol    string  // e.g., BTCUSDT, ETHUSDT
+	Asset     string  // e.g., BTC, ETH
+	Free      float64 // available amount
+	Locked    float64 // in open orders
+	Total     float64 // Free + Locked
+	BuyPrice  float64 // average buy price computed from trade history
+	TotalUSDT float64 // Total * BuyPrice
 }
 
 // GetAccountBalances fetches balances and computes BuyPrice for each symbol (e.g., BTCUSDT)
@@ -55,12 +56,13 @@ func (b *HttpRequest) GetAccountBalances() ([]AccountBalance, error) {
 		}
 
 		balances = append(balances, AccountBalance{
-			Symbol:   symbol,
-			Asset:    bItem.Asset,
-			Free:     free,
-			Locked:   locked,
-			Total:    total,
-			BuyPrice: buyPrice,
+			Symbol:    symbol,
+			Asset:     bItem.Asset,
+			Free:      free,
+			Locked:    locked,
+			Total:     total,
+			BuyPrice:  buyPrice,
+			TotalUSDT: total * buyPrice,
 		})
 	}
 

@@ -3,7 +3,6 @@ package binance
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"sort"
 	"strconv"
 	"time"
@@ -31,13 +30,6 @@ type Kline struct {
 
 // GetKlines fetches klines (candles) for symbol/interval. interval like "4h". limit optional <=1000
 func (b *HttpRequest) GetKlines(symbol, interval string, limit int) ([]Kline, error) {
-	params := url.Values{}
-	params.Add("symbol", symbol)
-	params.Add("interval", interval)
-	if limit > 0 {
-		params.Add("limit", strconv.Itoa(limit))
-	}
-
 	// use PublicRequest to call endpoint but PublicRequest composes endpoint+params, so:
 	body, err := b.PublicRequest("/api/v3/klines", map[string]string{"symbol": symbol, "interval": interval, "limit": strconv.Itoa(limit)})
 	if err != nil {

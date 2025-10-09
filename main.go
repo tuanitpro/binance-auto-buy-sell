@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -29,7 +30,102 @@ var (
 )
 
 // =================== Worker ======================
-// Updated checkPrices to use s.BuyPrice (from account trade history).
+func checkSignal(symbol string, change float64) (*utils.PredictResult, error) {
+	klines, err := api.GetKlines(symbol, interval, 200)
+	if err != nil {
+		log.Printf("GetKlines failed: %w", err)
+		return nil, err
+	}
+	if len(klines) < 29 {
+		log.Printf("not enough klines for RSI: have=%d", len(klines))
+		return nil, errors.New("not enough klines for RSI")
+	}
+
+	// collect closes in chronological order
+	closes := make([]float64, len(klines))
+	for i := range klines {
+		closes[i] = klines[i].Close
+	}
+
+	prediction, err := utils.PredictNextPrice(closes)
+	if err != nil {
+		fmt.Println("❌ Error:", err)
+		return nil, err
+	}
+
+	if prediction.Signal == "BUY" && change <= -percentThresholdBuy {
+		prediction.Signal = "BUY"
+	} else if prediction.Signal == "SELL" && change >= percentThresholdSell {
+		prediction.Signal = "SELL"
+	}
+
+	return prediction, nil
+}
+
+func autoTrade(balance binance.AccountBalance) string {
+	msg := ""
+	price, err := api.GetPrice(balance.Symbol)
+	if err != nil {
+		log.Println("Price error:", err)
+		return msg
+	}
+
+	currentValueUSDT := price * balance.Free
+	pnlUSDT := currentValueUSDT - balance.TotalUSDT
+	profitOrLoss := fmt.Sprintf("Loss: %.2f USDT", pnlUSDT)
+	if pnlUSDT > 0 {
+		profitOrLoss = fmt.Sprintf("Profit: %.2f USDT", pnlUSDT)
+	}
+	change := (price - balance.BuyPrice) / balance.BuyPrice * 100
+
+	fmt.Printf("[%s] Qty: %.8f | Buy: %.8f | Current: %.8f | PnL: %.8f (%.2f%%)\n",
+		balance.Symbol, balance.Free, balance.BuyPrice, price, pnlUSDT, change)
+
+	if change > -percentThreshold && change < percentThreshold {
+		return msg // no significant change, skip
+	}
+
+	prediction, err := checkSignal(balance.Symbol, change)
+	if err != nil {
+		fmt.Println("❌ Error:", err)
+		return msg
+	}
+
+	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
+		balance.Symbol, change, balance.BuyPrice, price, profitOrLoss, prediction.Signal, balance.Free, balance.BuyPrice, price, prediction.NextPrice, prediction.ChangePct)
+
+	if change <= -percentThreshold {
+		results, _ := utils.CalculateDCA(balance.Symbol, price, balance.Free, balance.BuyPrice)
+		fmt.Printf("📊 DCA Strategy for %s\n", balance.Symbol)
+
+		msg += fmt.Sprintf("\n\n📊 DCA Strategy for #%s\n", balance.Symbol)
+		for _, r := range results {
+			fmt.Printf("🎯 Target Avg: %.2f USDT |  Drop: %.2f%% | Buy: %.1f | Total: %.1f | Cost: %.2f USDT\n",
+				r.TargetAvg, r.DropPct, r.BuyQty, r.NewTotal, r.USDTSpent)
+
+			msg += fmt.Sprintf("🎯 Target Avg: %.2f USDT | Buy: %.1f | Total: %.1f | Cost: %.2f USDT\n", r.TargetAvg, r.BuyQty, r.NewTotal, r.USDTSpent)
+		}
+	}
+
+	if prediction.Signal == "SELL" && balance.Free >= 10 {
+		if err := api.PlaceOrder(balance.Symbol, "SELL", 10); err != nil {
+			log.Printf("Sell order error #%s: %v\n", balance.Symbol, err)
+			return msg
+		}
+		msg += "\n\nPartial Take-Profit: Sold 10 units."
+	}
+
+	if prediction.Signal == "BUY" {
+		if err := api.PlaceOrder(balance.Symbol, "BUY", 10); err != nil {
+			log.Printf("Buy order error %s: %v\n", balance.Symbol, err)
+			return msg
+		}
+		msg += "\n\nDCA Buy Order: Bought 10 units."
+	}
+
+	return msg
+}
+
 func cronJob() {
 	balances, err := api.GetAccountBalances()
 	if err != nil {
@@ -39,95 +135,18 @@ func cronJob() {
 
 	fmt.Println("📊 Account Balances:")
 
-	for _, s := range balances {
+	for _, balance := range balances {
 		// if we couldn't compute buy price from trade history, skip
-		if s.BuyPrice <= 0 {
-			log.Printf("[%s] No buyPrice from account history (Qty: %.8f). Skipping.\n", s.Asset, s.Total)
+		if balance.BuyPrice <= 0 {
+			log.Printf("[%s] No buyPrice from account history (Qty: %.8f). Skipping.\n", balance.Asset, balance.Total)
 			continue
 		}
-
-		// 1. Get 4h klines (we need at least 15 closes for RSI14)
-		klines, err := api.GetKlines(s.Symbol, interval, 200)
-		if err != nil {
-			log.Printf("GetKlines failed: %w", err)
-			continue
-		}
-		if len(klines) < 29 {
-			log.Printf("not enough klines for RSI: have=%d", len(klines))
-			continue
-		}
-
-		// collect closes in chronological order
-		closes := make([]float64, len(klines))
-		for i := range klines {
-			closes[i] = klines[i].Close
-		}
-
-		prediction, err := utils.PredictNextPrice(closes)
-		if err != nil {
-			fmt.Println("❌ Error:", err)
-			continue
-		}
-		// fmt.Printf("[%s] | Predicted: %.2f (%+.2f%%) | Signal: %s | StochRSI: %.2f | MACD: %.3f | SignalMA: %.3f | Hist: %.3f\n",
-		// 	s.Symbol,
-		// 	prediction.NextPrice, prediction.ChangePct,
-		// 	prediction.Signal, prediction.StochRSI,
-		// 	prediction.MACD, prediction.SignalMA, prediction.Histogram)
-
-		price, err := api.GetPrice(s.Symbol)
-		if err != nil {
-			log.Println("Price error:", err)
-			continue
-		}
-
-		change := (price - s.BuyPrice) / s.BuyPrice * 100
-		investedUSDT := s.BuyPrice * s.Free
-		currentValueUSDT := price * s.Free
-		pnlUSDT := currentValueUSDT - investedUSDT
-		log.Printf("[%s] Qty: %.8f | Buy Price: %.8f | Current: %.8f | Change: %.2f%% | PnL: %.8f | StochRSI: %.2f | MACD: %.3f  | Next Price: %.8f (%+.2f%%) | Signal: %s\n",
-			s.Symbol, s.Free, s.BuyPrice, price, change, pnlUSDT, prediction.StochRSI, prediction.MACD, prediction.NextPrice, prediction.ChangePct, prediction.Signal)
-
-		if change >= percentThreshold {
-			msg := fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: +%.2f%% (%.8f → %.8f)\nProfit: +%.8f (USDT)\nSignal: *%s* \nStochRSI: %.2f \nMACD: %.3f \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
-				s.Symbol, change, s.BuyPrice, price, pnlUSDT, prediction.Signal, prediction.StochRSI, prediction.MACD, s.Free, s.BuyPrice, price, prediction.NextPrice, prediction.ChangePct)
-
-			if change >= (percentThresholdSell) && s.Free >= 10 && prediction.Signal == "SELL" {
-				if err := api.PlaceOrder(s.Symbol, "SELL", 10); err != nil {
-					log.Printf("Sell order error #%s: %v\n", s.Symbol, err)
-					continue
-				}
-				msg += "\n\nPartial Take-Profit: Sold 10 units."
-			}
-
+		msg := autoTrade(balance)
+		if msg != "" {
 			if err := telegram.Send(msg); err != nil {
 				log.Printf("Telegram send error: %v\n", err)
 			}
-		} else if change <= -(percentThreshold) {
-			msg := fmt.Sprintf("🔻🔻🔻 *Auto-Trade for : #%s * \nPnL: %.2f%% (%.8f → %.8f)\nLoss: %.8f (USDT)\nSignal: *%s* \nStochRSI: %.2f \nMACD: %.3f \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
-				s.Symbol, change, s.BuyPrice, price, pnlUSDT, prediction.Signal, prediction.StochRSI, prediction.MACD, s.Free, s.BuyPrice, price, prediction.NextPrice, prediction.ChangePct)
-
-			results, _ := utils.CalculateDCA(s.Symbol, price, s.Free, s.BuyPrice)
-			fmt.Printf("📊 DCA Strategy for %s\n", s.Symbol)
-
-			msg += fmt.Sprintf("\n\n📊 DCA Strategy for #%s\n", s.Symbol)
-			for _, r := range results {
-				fmt.Printf("🎯 Target Avg: %.2f USDT |  Drop: %.2f%% | Buy: %.1f | Total: %.1f | Cost: %.2f USDT\n",
-					r.TargetAvg, r.DropPct, r.BuyQty, r.NewTotal, r.USDTSpent)
-
-				msg += fmt.Sprintf("🎯 Target Avg: %.2f USDT | Buy: %.1f | Total: %.1f | Cost: %.2f USDT\n", r.TargetAvg, r.BuyQty, r.NewTotal, r.USDTSpent)
-			}
-
-			if change <= -(percentThresholdBuy) && prediction.Signal == "BUY" {
-				// if err := api.PlaceOrder(s.Symbol, "BUY", 10); err != nil {
-				// 	log.Printf("Buy order error %s: %v\n", s.Symbol, err)
-				// 	continue
-				// }
-				msg += "\n\nDCA Buy Order: Bought 10 units."
-			}
-			if err := telegram.Send(msg); err != nil {
-				log.Printf("Telegram send error: %v\n", err)
-			}
-			log.Printf("Telegram message sent for %s\n", s.Symbol)
+			log.Printf("Telegram message sent for %s\n", balance.Symbol)
 		}
 	}
 }
