@@ -133,7 +133,7 @@ func cronJob() {
 		return
 	}
 
-	fmt.Println("📊 Account Balances:")
+	log.Println("📊 Checking Account Balances:")
 
 	for _, balance := range balances {
 		// if we couldn't compute buy price from trade history, skip
