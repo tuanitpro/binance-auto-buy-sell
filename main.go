@@ -76,10 +76,10 @@ func autoTrade(balance binance.AccountBalance) string {
 	if pnlUSDT > 0 {
 		profitOrLoss = fmt.Sprintf("Profit: %.2f USDT", pnlUSDT)
 	}
-	change := (price - balance.BuyPrice) / balance.BuyPrice * 100
+	change := (price - balance.AveragePrice) / balance.AveragePrice * 100
 
-	fmt.Printf("[%s] Qty: %.8f | Buy: %.8f | Current: %.8f | PnL: %.8f (%.2f%%)\n",
-		balance.Symbol, balance.Free, balance.BuyPrice, price, pnlUSDT, change)
+	fmt.Printf("[%s] Qty: %.8f | Average: %.8f | Cost: %.8f | Current: %.8f | Total: %.8f | PnL: %.8f (%.2f%%)\n",
+		balance.Symbol, balance.Free, balance.AveragePrice, balance.CostPrice, price, balance.TotalUSDT, pnlUSDT, change)
 
 	if change > -percentThreshold && change < percentThreshold {
 		return msg // no significant change, skip
@@ -91,10 +91,10 @@ func autoTrade(balance binance.AccountBalance) string {
 		return msg
 	}
 
-	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
-		balance.Symbol, change, balance.BuyPrice, price, profitOrLoss, prediction.Signal, balance.Free, balance.BuyPrice, price, prediction.NextPrice, prediction.ChangePct)
+	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f \nAverage Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
+		balance.Symbol, change, balance.AveragePrice, price, profitOrLoss, prediction.Signal, balance.Free, balance.AveragePrice, price, prediction.NextPrice, prediction.ChangePct)
 	if change <= -percentThreshold {
-		results, _ := utils.CalculateDCA(balance.Symbol, price, balance.Free, balance.BuyPrice)
+		results, _ := utils.CalculateDCA(balance.Symbol, price, balance.Free, balance.AveragePrice)
 		fmt.Printf("📊 DCA Strategy for %s\n", balance.Symbol)
 
 		msg += fmt.Sprintf("\n\n📊 DCA Strategy for #%s\n", balance.Symbol)
@@ -136,8 +136,8 @@ func cronJob() {
 
 	for _, balance := range balances {
 		// if we couldn't compute buy price from trade history, skip
-		if balance.BuyPrice <= 0 {
-			log.Printf("[%s] No buyPrice from account history (Qty: %.8f). Skipping.\n", balance.Asset, balance.Total)
+		if balance.AveragePrice <= 0 {
+			log.Printf("[%s] No AveragePrice from account history (Qty: %.8f). Skipping.\n", balance.Asset, balance.Total)
 			continue
 		}
 		msg := autoTrade(balance)
