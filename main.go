@@ -24,6 +24,7 @@ var (
 	percentThreshold     float64 = 10.0 // percentage change threshold for alerts
 	percentThresholdBuy  float64 = 10.0 // percentage change threshold buy for alerts
 	percentThresholdSell float64 = 15.0 // percentage change threshold sell for alerts
+	minQuantity          float64 = 5.0  // minimum quantity to trade
 
 	api      *binance.HttpRequest
 	telegram *notifier.TelegramNotifier
@@ -126,22 +127,22 @@ func autoTrade(balance binance.AccountBalance) string {
 		}
 	}
 
-	if (change > percentThresholdSell && balance.Free >= 5) &&
+	if (change > percentThresholdSell && balance.Free >= minQuantity) &&
 		(price >= prediction.DayHigh || prediction.Signal == "SELL") {
-		if err := api.PlaceOrder(balance.Symbol, "SELL", 5); err != nil {
+		if err := api.PlaceOrder(balance.Symbol, "SELL", minQuantity); err != nil {
 			log.Printf("Sell order error #%s: %v\n", balance.Symbol, err)
 			return msg
 		}
 
-		msg += "\n\nPartial Take-Profit: Sold 5 units."
+		msg += fmt.Sprintf("\n\nPartial Take-Profit: Sold %.1f units.", minQuantity)
 	}
 
 	if prediction.Signal == "BUY" && change <= -percentThresholdBuy {
-		if err := api.PlaceOrder(balance.Symbol, "BUY", 5); err != nil {
+		if err := api.PlaceOrder(balance.Symbol, "BUY", minQuantity); err != nil {
 			log.Printf("Buy order error %s: %v\n", balance.Symbol, err)
 			return msg
 		}
-		msg += "\n\nDCA Buy Order: Bought 5 units."
+		msg += fmt.Sprintf("\n\nDCA Buy Order: Bought %.1f units.", minQuantity)
 	}
 
 	return msg
@@ -214,6 +215,15 @@ func main() {
 			percentThresholdSell = v
 		} else {
 			log.Printf("Warning: invalid PERCENT_THRESHOLD_SELL: %v. Using default %.2f\n", err, percentThresholdSell)
+		}
+	}
+
+	var minQuantityString = os.Getenv("MIN_QUANTITY")
+	if minQuantityString != "" {
+		if v, err := strconv.ParseFloat(minQuantityString, 64); err == nil {
+			minQuantity = v
+		} else {
+			log.Printf("Warning: invalid MIN_QUANTITY: %v. Using default %.2f\n", err, minQuantity)
 		}
 	}
 
