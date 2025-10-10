@@ -78,8 +78,15 @@ func autoTrade(balance binance.AccountBalance) string {
 	}
 	change := (price - balance.AveragePrice) / balance.AveragePrice * 100
 
-	fmt.Printf("[%s] Qty: %.8f | Average: %.8f | Cost: %.8f | Current: %.8f | Total: %.8f | PnL: %.8f (%.2f%%)\n",
-		balance.Symbol, balance.Free, balance.AveragePrice, balance.CostPrice, price, balance.TotalUSDT, pnlUSDT, change)
+	fmt.Printf("[%s] Qty: %.8f | Entry Price: %.8f | Average Price: %.8f | Current: %.8f | Total: %.8f | PnL: %.8f (%.2f%%)\n",
+		balance.Symbol,
+		balance.Free,
+		balance.CostPrice,
+		balance.AveragePrice,
+		price,
+		balance.TotalUSDT,
+		pnlUSDT,
+		change)
 
 	if change > -percentThreshold && change < percentThreshold {
 		return msg // no significant change, skip
@@ -91,8 +98,19 @@ func autoTrade(balance binance.AccountBalance) string {
 		return msg
 	}
 
-	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f \nAverage Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
-		balance.Symbol, change, balance.AveragePrice, price, profitOrLoss, prediction.Signal, balance.Free, balance.AveragePrice, price, prediction.NextPrice, prediction.ChangePct)
+	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f  \nEntry Price: %.8f \nAverage Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
+		balance.Symbol,
+		change,
+		balance.AveragePrice,
+		price,
+		profitOrLoss,
+		prediction.Signal,
+		balance.Free,
+		balance.CostPrice,
+		balance.AveragePrice,
+		price,
+		prediction.NextPrice,
+		prediction.ChangePct)
 	if change <= -percentThreshold {
 		results, _ := utils.CalculateDCA(balance.Symbol, price, balance.Free, balance.AveragePrice)
 		fmt.Printf("📊 DCA Strategy for %s\n", balance.Symbol)
