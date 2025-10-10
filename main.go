@@ -52,12 +52,13 @@ func checkSignal(symbol string, change float64) (*utils.PredictResult, error) {
 		fmt.Println("❌ Error:", err)
 		return nil, err
 	}
-
-	// if prediction.Signal == "BUY" && change <= -percentThresholdBuy {
-	// 	prediction.Signal = "BUY"
-	// } else if prediction.Signal == "SELL" && change >= percentThresholdSell {
-	// 	prediction.Signal = "SELL"
-	// }
+	// Fetch daily high (1D interval)
+	dayKlines, err := api.GetKlines(symbol, "1d", 1)
+	if err != nil {
+		log.Printf("GetKlines 1d failed: %v", err)
+	} else if len(dayKlines) > 0 {
+		prediction.DayHigh = dayKlines[0].High
+	}
 
 	return prediction, nil
 }
@@ -98,7 +99,7 @@ func autoTrade(balance binance.AccountBalance) string {
 		return msg
 	}
 
-	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f  \nEntry Price: %.8f \nAverage Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
+	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f  \nEntry Price: %.8f \nAverage Price: %.8f \nCurrent Price: %.8f \nHigh:  %.8f  \nNext Price: %.8f (%+.2f%%)",
 		balance.Symbol,
 		change,
 		balance.AveragePrice,
@@ -109,6 +110,7 @@ func autoTrade(balance binance.AccountBalance) string {
 		balance.CostPrice,
 		balance.AveragePrice,
 		price,
+		prediction.DayHigh,
 		prediction.NextPrice,
 		prediction.ChangePct)
 	if change <= -percentThreshold {
@@ -124,11 +126,13 @@ func autoTrade(balance binance.AccountBalance) string {
 		}
 	}
 
-	if prediction.Signal == "SELL" && balance.Free >= 10 && change > percentThresholdSell {
+	if (change > percentThresholdSell && balance.Free >= 10) &&
+		(price >= prediction.DayHigh || prediction.Signal == "SELL") {
 		if err := api.PlaceOrder(balance.Symbol, "SELL", 10); err != nil {
 			log.Printf("Sell order error #%s: %v\n", balance.Symbol, err)
 			return msg
 		}
+
 		msg += "\n\nPartial Take-Profit: Sold 10 units."
 	}
 

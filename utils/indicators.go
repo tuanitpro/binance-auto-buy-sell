@@ -15,6 +15,7 @@ type PredictResult struct {
 	Histogram float64
 	RSI       float64
 	StochRSI  float64
+	DayHigh   float64 // new: highest price of the current day
 }
 
 // CalculateRSI computes RSI for the given closes using Wilder’s smoothing
