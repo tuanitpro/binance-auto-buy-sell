@@ -126,22 +126,22 @@ func autoTrade(balance binance.AccountBalance) string {
 		}
 	}
 
-	if (change > percentThresholdSell && balance.Free >= 10) &&
+	if (change > percentThresholdSell && balance.Free >= 5) &&
 		(price >= prediction.DayHigh || prediction.Signal == "SELL") {
-		if err := api.PlaceOrder(balance.Symbol, "SELL", 10); err != nil {
+		if err := api.PlaceOrder(balance.Symbol, "SELL", 5); err != nil {
 			log.Printf("Sell order error #%s: %v\n", balance.Symbol, err)
 			return msg
 		}
 
-		msg += "\n\nPartial Take-Profit: Sold 10 units."
+		msg += "\n\nPartial Take-Profit: Sold 5 units."
 	}
 
 	if prediction.Signal == "BUY" && change <= -percentThresholdBuy {
-		if err := api.PlaceOrder(balance.Symbol, "BUY", 10); err != nil {
+		if err := api.PlaceOrder(balance.Symbol, "BUY", 5); err != nil {
 			log.Printf("Buy order error %s: %v\n", balance.Symbol, err)
 			return msg
 		}
-		msg += "\n\nDCA Buy Order: Bought 10 units."
+		msg += "\n\nDCA Buy Order: Bought 5 units."
 	}
 
 	return msg
