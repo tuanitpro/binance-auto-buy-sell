@@ -53,11 +53,11 @@ func checkSignal(symbol string, change float64) (*utils.PredictResult, error) {
 		return nil, err
 	}
 
-	if prediction.Signal == "BUY" && change <= -percentThresholdBuy {
-		prediction.Signal = "BUY"
-	} else if prediction.Signal == "SELL" && change >= percentThresholdSell {
-		prediction.Signal = "SELL"
-	}
+	// if prediction.Signal == "BUY" && change <= -percentThresholdBuy {
+	// 	prediction.Signal = "BUY"
+	// } else if prediction.Signal == "SELL" && change >= percentThresholdSell {
+	// 	prediction.Signal = "SELL"
+	// }
 
 	return prediction, nil
 }
@@ -93,7 +93,6 @@ func autoTrade(balance binance.AccountBalance) string {
 
 	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f \nBuy Price: %.8f \nCurrent Price: %.8f \nNext Price: %.8f (%+.2f%%)",
 		balance.Symbol, change, balance.BuyPrice, price, profitOrLoss, prediction.Signal, balance.Free, balance.BuyPrice, price, prediction.NextPrice, prediction.ChangePct)
-
 	if change <= -percentThreshold {
 		results, _ := utils.CalculateDCA(balance.Symbol, price, balance.Free, balance.BuyPrice)
 		fmt.Printf("📊 DCA Strategy for %s\n", balance.Symbol)
@@ -107,7 +106,7 @@ func autoTrade(balance binance.AccountBalance) string {
 		}
 	}
 
-	if prediction.Signal == "SELL" && balance.Free >= 10 {
+	if prediction.Signal == "SELL" && balance.Free >= 10 && change > percentThresholdSell {
 		if err := api.PlaceOrder(balance.Symbol, "SELL", 10); err != nil {
 			log.Printf("Sell order error #%s: %v\n", balance.Symbol, err)
 			return msg
@@ -115,7 +114,7 @@ func autoTrade(balance binance.AccountBalance) string {
 		msg += "\n\nPartial Take-Profit: Sold 10 units."
 	}
 
-	if prediction.Signal == "BUY" {
+	if prediction.Signal == "BUY" && change <= -percentThresholdBuy {
 		if err := api.PlaceOrder(balance.Symbol, "BUY", 10); err != nil {
 			log.Printf("Buy order error %s: %v\n", balance.Symbol, err)
 			return msg
