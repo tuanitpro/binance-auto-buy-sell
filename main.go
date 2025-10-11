@@ -59,6 +59,7 @@ func checkSignal(symbol string, change float64) (*utils.PredictResult, error) {
 		log.Printf("GetKlines 1d failed: %v", err)
 	} else if len(dayKlines) > 0 {
 		prediction.DayHigh = dayKlines[0].High
+		prediction.DayLow = dayKlines[0].Low
 	}
 
 	return prediction, nil
@@ -100,7 +101,7 @@ func autoTrade(balance binance.AccountBalance) string {
 		return msg
 	}
 
-	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f  \nEntry Price: %.8f \nAverage Price: %.8f \nCurrent Price: %.8f \nHigh:  %.8f  \nNext Price: %.8f (%+.2f%%)",
+	msg += fmt.Sprintf("🚀🚀🚀 *Auto-Trade for: #%s * \nPnL: %.2f%% (%.8f → %.8f)\n%s\nSignal: *%s* \nQuantity: %.8f  \nEntry Price: %.8f \nAverage Price: %.8f \nCurrent Price: %.8f \nHigh:  %.8f - Low: %.8f  \nNext Price: %.8f (%+.2f%%)",
 		balance.Symbol,
 		change,
 		balance.AveragePrice,
@@ -112,6 +113,7 @@ func autoTrade(balance binance.AccountBalance) string {
 		balance.AveragePrice,
 		price,
 		prediction.DayHigh,
+		prediction.DayLow,
 		prediction.NextPrice,
 		prediction.ChangePct)
 	if change <= -percentThreshold {
@@ -170,6 +172,48 @@ func cronJob() {
 			}
 			log.Printf("Telegram message sent for %s\n", balance.Symbol)
 		}
+	}
+}
+
+func summarizeBalances() {
+	balances, err := api.GetAccountBalances()
+	if err != nil {
+		log.Println("Error getting balances:", err)
+		return
+	}
+
+	log.Println("📊 Account Balances Summary:")
+	msg := "📊 *Account Balances Summary:*\n\n"
+	totalUSDT := 0.0
+	totalCurrentUSDT := 0.0
+	totalProfitLoss := 0.0
+	for _, balance := range balances {
+		price, err := api.GetPrice(balance.Symbol)
+		if err != nil {
+			log.Println("Price error:", err)
+
+		}
+
+		if balance.TotalUSDT > 0 {
+			currentValueUSDT := price * balance.Free
+			pnlUSDT := currentValueUSDT - balance.TotalUSDT
+			change := (price - balance.AveragePrice) / balance.AveragePrice * 100
+			totalUSDT += balance.TotalUSDT
+			totalCurrentUSDT += currentValueUSDT
+			totalProfitLoss += pnlUSDT
+			fmt.Printf("[%s]: Qty: %.8f | Avg Price: %.8f | Current Price: %.8f | Total: %.2f USDT. PNL: %.2f (%.2f%%)\n",
+				balance.Symbol, balance.Free, balance.AveragePrice, price, balance.TotalUSDT, pnlUSDT, change)
+			msg += fmt.Sprintf("[#%s]: %.4f - Avg: %.4f - PnL: %.2f (%.2f%%)\n",
+				balance.Symbol, balance.Free, balance.AveragePrice, pnlUSDT, change)
+		}
+	}
+	totalChange := (totalCurrentUSDT - totalUSDT) / totalUSDT * 100
+	fmt.Printf("Total Portfolio Value: %.2f USDT. Current: %.2f. PnL: %.2f (%.2f%%)\n", totalUSDT, totalCurrentUSDT, totalProfitLoss, totalChange)
+	msg += fmt.Sprintf("\n*Total Portfolio Value:* %.2f USDT. \n*Current:* %.2f USDT. \n*PNL:* %.2f USDT (%.2f%%)", totalUSDT, totalCurrentUSDT, totalProfitLoss, totalChange)
+	if err := telegram.Send(msg); err != nil {
+		log.Printf("Telegram send error: %v\n", err)
+	} else {
+		log.Println("Telegram summary message sent.")
 	}
 }
 
@@ -237,6 +281,7 @@ func main() {
 	if *runNow {
 		fmt.Println("🚀 Running job immediately (--now)")
 		cronJob() // run once immediately
+		summarizeBalances()
 		return
 	}
 
@@ -248,8 +293,16 @@ func main() {
 		fmt.Println("❌ Cannot schedule job:", err)
 		os.Exit(1)
 	}
+
+	// run every day at 12:30 (12:30 PM) - summary of balances
+	_, err = c.AddFunc("30 12 * * *", summarizeBalances)
+	if err != nil {
+		fmt.Println("❌ Cannot schedule job:", err)
+		os.Exit(1)
+	}
+
 	c.Start()
 
-	log.Println("Bot started. Checking every 5 minutes...")
+	log.Println("Bot started. Next job in 5 minutes.")
 	select {} // block forever
 }

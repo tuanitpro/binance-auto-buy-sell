@@ -16,6 +16,7 @@ type PredictResult struct {
 	RSI       float64
 	StochRSI  float64
 	DayHigh   float64 // new: highest price of the current day
+	DayLow    float64 // new: lowest price of the current day
 }
 
 // CalculateRSI computes RSI for the given closes using Wilder’s smoothing
