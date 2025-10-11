@@ -337,14 +337,13 @@ func main() {
 
 	// --- default: cron schedule ---
 	c := cron.New()
-	// run every day at 12:30 (12:30 PM) - summary of balances
-
+	// run job every 5 minutes
 	_, err = c.AddFunc("@every 5m", cronJob)
 	if err != nil {
 		fmt.Println("❌ Cannot schedule job:", err)
 		os.Exit(1)
 	}
-
+	// run every day at 12:30 (12:30 PM) - summary of balances
 	_, err = c.AddFunc("30 12 * * *", summarizeBalances)
 	if err != nil {
 		fmt.Println("❌ Cannot schedule job:", err)
