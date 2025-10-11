@@ -8,8 +8,14 @@ import (
 	"os"
 	"strconv"
 
+	"context"
+	"os/signal"
+
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
+
 	"main.go/binance"
 	"main.go/notifier"
 	"main.go/utils"
@@ -217,6 +223,50 @@ func summarizeBalances() {
 	}
 }
 
+func handler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	if update.Message == nil { // ignore non-Message updates
+		return
+	}
+
+	log.Printf("Received message: %s", update.Message.Text)
+	if update.Message.Text == "/start" {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Hello! I am your Binance Auto Trade Bot. I will help you monitor your account and execute trades based on predefined strategies. You can use the /help command to see available commands.",
+		})
+		return
+	}
+	if update.Message.Text == "/help" {
+		helpText := "Available commands:\n" +
+			"/start - Start the bot\n" +
+			"/help - Show this help message\n" +
+			"/balance - Show account balance summary\n" +
+			"/run - Run the trading job immediately\n" +
+			"/schedule - Schedule the trading job every 5 minutes\n" +
+			"/stop - Stop the scheduled trading job\n" +
+			"\nThe bot automatically checks your account every 5 minutes and summarizes balances daily at 12:30 PM."
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   helpText,
+		})
+		return
+	}
+	if update.Message.Text == "/balance" {
+		summarizeBalances()
+		return
+	}
+	if update.Message.Text == "/run" {
+		cronJob()
+		return
+	}
+	// Echo the received message back to the user
+
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   update.Message.Text,
+	})
+}
+
 // =================== MAIN ======================
 func main() {
 	err := godotenv.Load()
@@ -293,7 +343,6 @@ func main() {
 		fmt.Println("❌ Cannot schedule job:", err)
 		os.Exit(1)
 	}
-
 	// run every day at 12:30 (12:30 PM) - summary of balances
 	_, err = c.AddFunc("30 12 * * *", summarizeBalances)
 	if err != nil {
@@ -302,7 +351,25 @@ func main() {
 	}
 
 	c.Start()
+	log.Println("Cron jobs scheduled.")
+	// --- end cron ---
 
-	log.Println("Bot started. Next job in 5 minutes.")
-	select {} // block forever
+	// Setup Telegram bot
+	// Create a context that is cancelled on SIGINT (Ctrl+C)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	opts := []bot.Option{
+		bot.WithDefaultHandler(handler),
+	}
+
+	b, err := bot.New(tgToken, opts...)
+	if err != nil {
+		panic(err)
+	}
+	log.Println("Bot started.")
+	b.Start(ctx)
+
+	// select {} // block forever
 }
