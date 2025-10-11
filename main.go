@@ -337,7 +337,7 @@ func main() {
 
 	// --- default: cron schedule ---
 	c := cron.New()
-	// run job every 5 minutes
+	// run every 5 minutes
 	_, err = c.AddFunc("@every 5m", cronJob)
 	if err != nil {
 		fmt.Println("❌ Cannot schedule job:", err)
