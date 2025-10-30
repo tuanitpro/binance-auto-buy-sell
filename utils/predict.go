@@ -15,8 +15,9 @@ type PredictResult struct {
 	Histogram float64
 	RSI       float64
 	StochRSI  float64
-	DayHigh   float64 // new: highest price of the current day
-	DayLow    float64 // new: lowest price of the current day
+	BollPctB  float64 // new: Bollinger %B (position between lower–upper band)
+	DayHigh   float64
+	DayLow    float64
 }
 
 // CalculateRSI computes RSI for the given closes using Wilder’s smoothing
@@ -25,7 +26,6 @@ func CalculateRSI(closes []float64, period int) (float64, error) {
 		return 0, errors.New("not enough closes to calculate RSI")
 	}
 
-	// initial average gain/loss using first period
 	gainSum := 0.0
 	lossSum := 0.0
 	for i := 1; i <= period; i++ {
@@ -39,11 +39,9 @@ func CalculateRSI(closes []float64, period int) (float64, error) {
 	avgGain := gainSum / float64(period)
 	avgLoss := lossSum / float64(period)
 
-	// Wilder smoothing for remaining data
 	for i := period + 1; i < len(closes); i++ {
 		delta := closes[i] - closes[i-1]
-		gain := 0.0
-		loss := 0.0
+		gain, loss := 0.0, 0.0
 		if delta > 0 {
 			gain = delta
 		} else {
@@ -65,13 +63,11 @@ func CalculateRSI(closes []float64, period int) (float64, error) {
 }
 
 // CalculateStochRSI computes the Stochastic RSI with optional 3-period SMA smoothing.
-// Returns the smoothed StochRSI (0–1 scale).
 func CalculateStochRSI(closes []float64, rsiPeriod, stochPeriod int) (float64, error) {
 	if len(closes) < rsiPeriod+stochPeriod {
 		return 0, fmt.Errorf("not enough closes for StochRSI calculation: got %d need %d", len(closes), rsiPeriod+stochPeriod)
 	}
 
-	// --- Step 1: Build RSI series ---
 	rsiSeries := make([]float64, 0, len(closes)-rsiPeriod)
 	for i := rsiPeriod + 1; i <= len(closes); i++ {
 		rsi, err := CalculateRSI(closes[i-(rsiPeriod+1):i], rsiPeriod)
@@ -85,7 +81,6 @@ func CalculateStochRSI(closes []float64, rsiPeriod, stochPeriod int) (float64, e
 		return 0, fmt.Errorf("not enough RSI points for StochRSI window: have %d need %d", len(rsiSeries), stochPeriod)
 	}
 
-	// --- Step 2: Compute raw StochRSI series ---
 	stochRSISeries := make([]float64, 0, len(rsiSeries)-stochPeriod+1)
 	for i := stochPeriod; i <= len(rsiSeries); i++ {
 		window := rsiSeries[i-stochPeriod : i]
@@ -107,7 +102,6 @@ func CalculateStochRSI(closes []float64, rsiPeriod, stochPeriod int) (float64, e
 		stochRSISeries = append(stochRSISeries, value)
 	}
 
-	// --- Step 3: Apply 3-period SMA smoothing (TradingView-style) ---
 	smoothPeriod := 3
 	if len(stochRSISeries) < smoothPeriod {
 		return stochRSISeries[len(stochRSISeries)-1], nil
@@ -122,7 +116,6 @@ func CalculateStochRSI(closes []float64, rsiPeriod, stochPeriod int) (float64, e
 	return math.Max(0, math.Min(1, smoothed)), nil
 }
 
-// SMA computes simple moving average
 func SMA(data []float64) float64 {
 	if len(data) == 0 {
 		return 0
@@ -134,15 +127,13 @@ func SMA(data []float64) float64 {
 	return sum / float64(len(data))
 }
 
-// EMA calculates the Exponential Moving Average for the last value in data.
 func EMA(data []float64, period int) float64 {
 	if len(data) < period {
 		return SMA(data)
 	}
 
 	k := 2.0 / (float64(period) + 1.0)
-	ema := SMA(data[:period]) // start with SMA as seed
-
+	ema := SMA(data[:period])
 	for i := period; i < len(data); i++ {
 		ema = (data[i]-ema)*k + ema
 	}
@@ -166,13 +157,32 @@ func MACD(closes []float64, shortPeriod, longPeriod, signalPeriod int) (float64,
 
 	signalLine := EMA(macdLine, signalPeriod)
 	histogram := macdLine[len(macdLine)-1] - signalLine
-
 	return macdLine[len(macdLine)-1], signalLine, histogram
 }
 
-// PredictNextPrice analyzes close prices using EMA, MACD, and StochRSI.
+// BollingerBands returns upper, lower, and %B arrays.
+func BollingerBands(closes []float64, period int) (upper, lower, percentB []float64) {
+	upper = make([]float64, len(closes))
+	lower = make([]float64, len(closes))
+	percentB = make([]float64, len(closes))
+	for i := period; i < len(closes); i++ {
+		var sum, sumSq float64
+		for j := i - period; j < i; j++ {
+			sum += closes[j]
+			sumSq += closes[j] * closes[j]
+		}
+		mean := sum / float64(period)
+		stddev := math.Sqrt(sumSq/float64(period) - mean*mean)
+		upper[i] = mean + 2*stddev
+		lower[i] = mean - 2*stddev
+		percentB[i] = (closes[i] - lower[i]) / (upper[i] - lower[i])
+	}
+	return
+}
+
+// PredictNextPrice now includes Bollinger %B.
 func PredictNextPrice(closes []float64) (*PredictResult, error) {
-	if len(closes) < 60 { // ensure enough data for MACD & StochRSI
+	if len(closes) < 60 {
 		return nil, errors.New("not enough close prices to calculate indicators")
 	}
 
@@ -181,28 +191,25 @@ func PredictNextPrice(closes []float64) (*PredictResult, error) {
 
 	shortEMA := EMA(closes, 7)
 	longEMA := EMA(closes, 20)
-
 	macdLine, signalLine, hist := MACD(closes, 12, 26, 9)
-
 	stochRSI, err := CalculateStochRSI(closes, 14, 14)
 	if err != nil {
 		return nil, fmt.Errorf("stochRSI calc failed: %w", err)
 	}
 
+	// --- Bollinger Bands ---
+	_, _, percentB := BollingerBands(closes, 20)
+	bollPctB := percentB[len(percentB)-1]
+
 	momentum := (currentPrice - prevPrice) / prevPrice * 100
 	predicted := currentPrice * (1 + momentum/200)
 	changePct := (predicted - currentPrice) / currentPrice * 100
 
-	// --- Signal logic ---
 	signal := "HOLD"
-
-	// BUY: trend up + MACD bullish + StochRSI < 0.2 (oversold)
-	if shortEMA > longEMA && macdLine > signalLine && stochRSI < 0.2 {
+	if shortEMA > longEMA && macdLine > signalLine && stochRSI < 0.2 && bollPctB < 0.2 {
 		signal = "BUY"
 	}
-
-	// SELL: trend down + MACD bearish + StochRSI > 0.8 (overbought)
-	if shortEMA < longEMA && macdLine < signalLine && stochRSI > 0.8 {
+	if shortEMA < longEMA && macdLine < signalLine && stochRSI > 0.8 && bollPctB > 0.8 {
 		signal = "SELL"
 	}
 
@@ -214,5 +221,6 @@ func PredictNextPrice(closes []float64) (*PredictResult, error) {
 		SignalMA:  math.Round(signalLine*1000) / 1000,
 		Histogram: math.Round(hist*1000) / 1000,
 		StochRSI:  math.Round(stochRSI*1000) / 1000,
+		BollPctB:  math.Round(bollPctB*1000) / 1000,
 	}, nil
 }

@@ -201,14 +201,14 @@ func summarizeBalances() {
 		}
 
 		if balance.TotalUSDT > 0 {
-			currentValueUSDT := price * balance.Free
+			currentValueUSDT := price * balance.Total
 			pnlUSDT := currentValueUSDT - balance.TotalUSDT
 			change := (price - balance.AveragePrice) / balance.AveragePrice * 100
 			totalUSDT += balance.TotalUSDT
 			totalCurrentUSDT += currentValueUSDT
 			totalProfitLoss += pnlUSDT
-			fmt.Printf("[%s]: Qty: %.8f | Avg Price: %.8f | Current Price: %.8f | Total: %.2f USDT. PNL: %.2f (%.2f%%)\n",
-				balance.Symbol, balance.Free, balance.AveragePrice, price, balance.TotalUSDT, pnlUSDT, change)
+			fmt.Printf("[%s]: Qty: %.8f | Avg Price: %.8f | Current Price: %.8f | Total: %.2f USDT. | %.2f PNL: %.2f (%.2f%%)\n",
+				balance.Symbol, balance.Total, balance.AveragePrice, price, balance.TotalUSDT, currentValueUSDT, pnlUSDT, change)
 			msg += fmt.Sprintf("[#%s]: %.4f - Avg: %.4f - PnL: %.2f (%.2f%%)\n",
 				balance.Symbol, balance.Free, balance.AveragePrice, pnlUSDT, change)
 		}
